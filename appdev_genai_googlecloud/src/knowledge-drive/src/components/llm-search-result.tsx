@@ -20,9 +20,7 @@ const isValidSearchResponse = (res: any) =>
   "metadata" in res &&
   typeof res.metadata === "object" &&
   "source" in res.metadata &&
-  typeof res.metadata.source === "string" &&
-  "page" in res.metadata &&
-  typeof res.metadata.page === "number";
+  typeof res.metadata.source === "string";
 
 const QUERY_API_PATH = "/api/question";
 
@@ -36,10 +34,15 @@ const LLMSearchResult = ({ question }: LLMSearchResultProps) => {
       body: JSON.stringify({ question: question }),
     });
     if (!res.ok) {
+      console.log(res.status);
+      const txt = res.text();
+      console.log(txt);
       throw new Error("Failed to execute LLM search");
     }
     const data = await res.json();
     if (!isValidSearchResponse(data)) {
+    console.log("Invalid search response");
+    console.log(data);
       throw new Error("Invalid search response");
     }
     return data;
@@ -64,6 +67,7 @@ const LLMSearchResult = ({ question }: LLMSearchResultProps) => {
   }
 
   if (error) {
+    console.log(error);
     return (
       <div className="flex h-full w-full flex-col items-center justify-center">
         <div className="flex flex-col items-center justify-center">
@@ -103,9 +107,9 @@ const LLMSearchResult = ({ question }: LLMSearchResultProps) => {
         </div>
         <div className="grow" />
         <div className="flex w-10 items-center justify-center rounded-md bg-white p-2 shadow">
-          {result?.metadata.page == null
+          {result?.metadata.page == null && result?.metadata.page_number == null
             ? ""
-            : (result.metadata.page + 1).toString()}
+            : (result.metadata.page + 1).toString() || (result.metadata.page_number).toString()}
         </div>
       </div>
     </div>

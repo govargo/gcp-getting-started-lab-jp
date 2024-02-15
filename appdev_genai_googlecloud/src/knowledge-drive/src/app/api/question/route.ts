@@ -13,9 +13,7 @@ const isValidSearchResponse = (res: any) =>
   "metadata" in res &&
   typeof res.metadata === "object" &&
   "source" in res.metadata &&
-  typeof res.metadata.source === "string" &&
-  "page" in res.metadata &&
-  typeof res.metadata.page === "number";
+  typeof res.metadata.source === "string";
 
 export async function POST(request: Request) {
   const action = "question";

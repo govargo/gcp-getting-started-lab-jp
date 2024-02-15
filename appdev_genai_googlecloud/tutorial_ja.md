@@ -183,7 +183,7 @@ CREATE TABLE items(
   id VARCHAR(21) PRIMARY KEY,
   name VARCHAR(128) NOT NULL,
   size INT,
-  type VARCHAR(64),
+  type VARCHAR(100),
   is_folder BOOL NOT NULL,
   created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
   parent VARCHAR(21) NOT NULL,
@@ -465,6 +465,7 @@ gcloud builds submit ./src/genai-app \
   --tag asia-northeast1-docker.pkg.dev/$GOOGLE_CLOUD_PROJECT/drive-repo/genai-app && \
 gcloud run deploy genai-app \
   --image asia-northeast1-docker.pkg.dev/$GOOGLE_CLOUD_PROJECT/drive-repo/genai-app \
+  --memory 2Gi \
   --service-account genai-app@$GOOGLE_CLOUD_PROJECT.iam.gserviceaccount.com \
   --no-allow-unauthenticated \
   --set-env-vars "PJID=$GOOGLE_CLOUD_PROJECT" \

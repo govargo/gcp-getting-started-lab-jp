@@ -6,10 +6,11 @@ from google.cloud import storage
 from google.cloud.sql.connector import Connector
 from cloudevents.http import from_http
 from flask import Flask, request, jsonify
-from langchain.document_loaders import PyPDFLoader
-from langchain.embeddings import VertexAIEmbeddings
-from langchain.llms import VertexAI
-from langchain import PromptTemplate
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import UnstructuredExcelLoader
+from langchain_google_vertexai import VertexAIEmbeddings
+from langchain_google_vertexai import VertexAI
+from langchain.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import AnalyzeDocumentChain
 from langchain.chains.question_answering import load_qa_chain
@@ -90,7 +91,7 @@ async def search_doc(embeddings_data:list, user_id:str):
     
 def call_Palm(context:str, question:str):
     llm = VertexAI(
-        model_name="text-bison@001",
+        model_name="text-bison@002",
         max_output_tokens=256,
         temperature=0.1,
         top_p=0.8,
@@ -164,10 +165,10 @@ async def register_doc():
     
     print("Uploaded file: {}".format(name))
 
-    if not ext.lower() == ".pdf":
-        return ("This is not pdf file", 200)
+    if not ext.lower() == ".pdf" and not ext.lower() == ".xls" and not ext.lower() == ".xlsx":
+        return ("This is not pdf or excel file", 200)
 
-    # download pdf form gcs
+    # download pdf/excel form gcs
     download_from_gcs(bucket_name, name)
     user_id, name = name.split("/")[-2:]
 
@@ -176,36 +177,63 @@ async def register_doc():
     file_id = name[:21]
     
     # Generate summary of the pdf
-    loader = PyPDFLoader(name)
-    document = loader.load()
-    llm = VertexAI(
-        model_name="text-bison@001",
-        max_output_tokens=256,
-        temperature=0.1,
-        top_p=0.8,
-        top_k=40,
-        verbose=True,
-    )
+    if ext.lower() == ".pdf":
+      loader = PyPDFLoader(name)
+      document = loader.load()
+      llm = VertexAI(
+          model_name="text-bison@001",
+          max_output_tokens=256,
+          temperature=0.1,
+          top_p=0.8,
+          top_k=40,
+          verbose=True,
+      )
+
+    # Generate summary of the excel
+    if ext.lower() == ".xls" or ext.lower() == ".xlsx":
+      loader = UnstructuredExcelLoader(name, mode="elements")
+      document = loader.load()
+      llm = VertexAI(
+          model_name="text-bison@001",
+          max_output_tokens=256,
+          temperature=0.1,
+          top_p=0.8,
+          top_k=40,
+          verbose=True,
+      )
 
     qa_chain = load_qa_chain(llm, chain_type="map_reduce")
     qa_document_chain = AnalyzeDocumentChain(combine_docs_chain=qa_chain)
     description = qa_document_chain.run(
-        input_document=document[0].page_content[:5000],
-        question="何についての文書ですか？日本語で2文にまとめて答えてください。")
+      input_document=document[0].page_content[:5000],
+      question="何についての文書ですか？日本語で2文にまとめて答えてください。")
 
     await store_description(user_id, file_id, description)
 
+
     # Load pdf for generate embeddings
-    loader = PyPDFLoader(name)
-    text_splitter = RecursiveCharacterTextSplitter(
-        separators=["\n", "。"],
-        chunk_size=500,
-        chunk_overlap=0,
-        length_function=len,
-    )
-    pages = loader.load_and_split(text_splitter=text_splitter)
+    if ext.lower() == ".pdf":
+      loader = PyPDFLoader(name)
+      text_splitter = RecursiveCharacterTextSplitter(
+          separators=["\n", "。"],
+          chunk_size=500,
+          chunk_overlap=0,
+          length_function=len,
+      )
+      pages = loader.load_and_split(text_splitter=text_splitter)
+
+    # Load excel for generate embeddings
+    if ext.lower() == ".xls" or ext.lower() == ".xlsx":
+      loader = UnstructuredExcelLoader(name, mode="elements")
+      text_splitter = RecursiveCharacterTextSplitter(
+          separators=["\n", "。"],
+          chunk_size=500,
+          chunk_overlap=0,
+          length_function=len,
+      )
+      pages = loader.load_and_split(text_splitter=text_splitter)
     
-    # Create embeddings and inser data to Cloud SQL
+    # Create embeddings and insert data to Cloud SQL
     embeddings = VertexAIEmbeddings(model_name="textembedding-gecko-multilingual@latest")
     for c, page in enumerate(pages[:100]): # Limit the nubmer of pages to avoid timeout.
         embeddings_data = embeddings.embed_query(page.page_content)
@@ -250,6 +278,8 @@ async def search():
         "answer": llm_result,
         "metadata": json.loads(results[0]["metadata"])
     }
+
+    print(response)
     
     return jsonify(response)
 
